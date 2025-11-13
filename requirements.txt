@@ -1,0 +1,21 @@
+# Core ML
+tensorflow==2.19.0
+# TensorFlow.js Converter (for model export)
+tensorflowjs==4.22.0
+# Image Processing
+opencv-python==4.12.0.88
+Pillow==11.3.0
+# Numerical Computing
+numpy==2.0.2
+scipy==1.16.2
+# Web Framework
+Flask==3.1.2
+flask-cors==5.0.0
+# AWS S3
+boto3==1.35.94
+# Supabase
+supabase==2.15.2
+# Environment Variables
+python-dotenv==1.1.1
+# Progress bars (used in training.py)
+tqdm==4.67.1
