@@ -17,7 +17,8 @@ class SupabaseRecorder:
         model_uuid: str,
         sample_count: int,
         student_count: int,
-        genuine_count: int
+        genuine_count: int,
+        admin_id: str
     ) -> int:
         """
         Record training start in database
@@ -32,6 +33,7 @@ class SupabaseRecorder:
                 'sample_count': sample_count,
                 'student_count': student_count,
                 'genuine_count': genuine_count,
+                'admin_id': admin_id,
                 'training_date': datetime.now().isoformat(),
                 'model_path': '',  # Will update later
                 's3_key': '',      # Will update later
@@ -43,7 +45,7 @@ class SupabaseRecorder:
                 raise Exception("No data returned from insert")
             
             record_id = response.data[0]['id']
-            print(f"✅ Training record created: ID {record_id}")
+            print(f"✅ Training record created: ID {record_id} (Admin: {admin_id})")
             return record_id
             
         except Exception as e:
