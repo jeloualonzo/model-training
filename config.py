@@ -1,16 +1,8 @@
-"""
-Configuration
-- MobileNetV2 α=0.5
-- Early stopping enabled
-- TF.js conversion settings
-- S3 upload settings
-"""
+# filepath: python/config.py (UPDATED)
 import os
 from dotenv import load_dotenv
-
 # Load environment variables
 load_dotenv()
-
 class Config:
     # Model Architecture (EXACT WebGL Match)
     MODEL = {
@@ -30,7 +22,7 @@ class Config:
         'learning_rate': 0.0005,
         'validation_split': 0.15,
         'augmentation_count': 6,
-        'min_samples_per_class': 1,
+        'min_samples_per_class': 3,
         'early_stopping_patience': 15,
         'early_stopping_min_delta': 0.001,
         'early_stopping_restore_best': True,
@@ -104,7 +96,7 @@ class Config:
         'enabled': os.getenv('VITE_ENABLE_S3_STORAGE', 'true').lower() == 'true',
         'access_key': os.getenv('VITE_AWS_ACCESS_KEY_ID'),
         'secret_key': os.getenv('VITE_AWS_SECRET_ACCESS_KEY'),
-        'bucket': os.getenv('VITE_S3_BUCKET', 'signatures-model-storage'),
+        'bucket': os.getenv('VITE_S3_BUCKET', 'signatureai-uploads'),
         'region': os.getenv('VITE_AWS_REGION', 'ap-southeast-1'),
         'public_base_url': os.getenv('VITE_S3_PUBLIC_BASE_URL'),
     }
@@ -115,5 +107,4 @@ class Config:
         'url': os.getenv('SUPABASE_URL'),
         'key': os.getenv('SUPABASE_KEY'),
     }
-
 config = Config()
