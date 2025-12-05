@@ -29,10 +29,12 @@ class SignatureTrainer:
         classes: List[Dict]
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, List[str]]:
         """
-        ✅ FIXED: Prepare data with validation split BEFORE augmentation
+        ✅ UPDATED: Prepare data with type-aware augmentation
         
-        Returns:
-            X_train, y_train, X_val, y_val, class_labels
+        Augmentation rules:
+        - Default classes (unknown/non-signature): NO augmentation
+        - Student captured signatures: NO augmentation
+        - Student uploaded signatures: WITH augmentation
         """
         print("\n🔄 Preparing training data...")
         
@@ -78,7 +80,13 @@ class SignatureTrainer:
                 val_features.append(img)
                 val_labels.append(class_idx)
             
-            # Process TRAINING samples (WITH augmentation for students)
+            # ✅ NEW: Count signatures by type
+            if not is_default:
+                uploaded_count = len([s for s in train_samples if s.get('type') == 'uploaded'])
+                captured_count = len([s for s in train_samples if s.get('type') == 'captured'])
+                print(f"   Training breakdown: {uploaded_count} uploaded (with aug), {captured_count} captured (no aug)")
+            
+            # Process TRAINING samples (WITH selective augmentation)
             for sample in tqdm(train_samples, desc=f"   Processing"):
                 img = self._decode_base64_image(sample['thumbnail'])
                 if img is None:
@@ -88,8 +96,16 @@ class SignatureTrainer:
                 train_features.append(img)
                 train_labels.append(class_idx)
                 
-                # Add augmented versions (only for real students)
-                if not is_default:
+                # ✅ AUGMENTATION RULES:
+                # 1. Default classes: NO augmentation
+                # 2. Captured signatures: NO augmentation
+                # 3. Uploaded signatures: WITH augmentation
+                should_augment = (
+                    not is_default and  # Not a default class
+                    sample.get('type') == 'uploaded'  # Only uploaded signatures
+                )
+                
+                if should_augment:
                     for aug_idx in range(config.AUGMENTATION['per_sample']):
                         try:
                             aug_img = augment_signature(img.copy())
@@ -104,9 +120,15 @@ class SignatureTrainer:
             val_count_actual = len([l for l in val_labels if l == class_idx])
             
             if is_default:
-                print(f"   ✅ Training: {train_count} (NO augmentation)")
+                print(f"   ✅ Training: {train_count} (NO augmentation - default class)")
             else:
-                print(f"   ✅ Training: {train_count} (WITH augmentation)")
+                uploaded_originals = len([s for s in train_samples if s.get('type') == 'uploaded'])
+                captured_originals = len([s for s in train_samples if s.get('type') == 'captured'])
+                uploaded_augmented = uploaded_originals * (config.AUGMENTATION['per_sample'] + 1)
+                
+                print(f"   ✅ Training: {train_count} total")
+                print(f"      • {uploaded_augmented} uploaded (with {config.AUGMENTATION['per_sample']}x aug)")
+                print(f"      • {captured_originals} captured (no aug)")
             print(f"   ✅ Validation: {val_count_actual} (originals only)")
         
         # Convert to numpy arrays
