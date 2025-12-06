@@ -167,13 +167,18 @@ class SignatureTrainer:
         
         # ✅ NEW: Track per-class signature counts BEFORE data preparation
         class_info = []
-        
+        original_total_count = 0
+
         for class_idx, cls in enumerate(classes):
             if not cls.get('samples'):
                 continue
             
             is_default = cls.get('isDefault', False)
             original_sample_count = len(cls.get('samples', []))
+            
+            # ✅ ONLY count student signatures, skip defaults
+            if not is_default:
+                original_total_count += original_sample_count
             
             if is_default:
                 default_name = cls.get('defaultName', 'Unknown')
@@ -191,8 +196,12 @@ class SignatureTrainer:
                     'is_default': False
                 })
         
+        print(f"📊 Original signatures (before augmentation): {original_total_count}")  # ✅ ADD THIS
+        
         # Prepare data without validation split
         X_train, y_train, X_val, y_val, self.class_labels = self.prepare_data(classes)
+        
+        print(f"📊 Augmented training samples: {len(X_train)}")
         
         # Create model
         print("\n🏗️ Building model...")
@@ -282,7 +291,7 @@ class SignatureTrainer:
             'best_val_loss': float(best_val_loss),
             'best_val_accuracy': float(best_val_acc),
             'early_stopped': epochs_trained < config.TRAINING['epochs'],
-            'total_samples': len(X_train),
+            'total_samples': original_total_count,
             'validation_samples': len(X_val),
             'num_classes': self.num_classes,
             'class_labels': self.class_labels,
@@ -301,6 +310,8 @@ class SignatureTrainer:
         print(f"📊 Final Training Accuracy: {final_train_acc*100:.2f}%")
         print(f"📊 Final Validation Accuracy: {final_val_acc*100:.2f}% (dummy set)")
         print(f"⏱️  Training Time: {training_time:.1f} seconds")
+        print(f"📊 Original signatures: {original_total_count}")
+        print(f"📊 Training samples (with augmentation): {len(X_train)}")
         
         if metrics['early_stopped']:
             print(f"\n🛑 Early stopping triggered!")
