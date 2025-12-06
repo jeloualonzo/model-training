@@ -20,7 +20,7 @@ class Config:
         'epochs': 70,
         'batch_size': 32,
         'learning_rate': 0.0005,
-        'validation_split': 0.15,
+        'validation_split': 0.0,  # ✅ CHANGED: No validation split
         'augmentation_count': 6,
         'min_samples_per_class': 3,
         'early_stopping_patience': 15,
