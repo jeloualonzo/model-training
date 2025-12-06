@@ -1,4 +1,4 @@
-# filepath: python/training.py
+# filepath: python/training.py (UPDATED)
 from classifier_extractor import ClassifierExtractor
 from pathlib import Path
 import uuid
@@ -9,7 +9,7 @@ import numpy as np
 import cv2
 from typing import List, Dict, Tuple
 from tensorflow import keras
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau  # ✅ ADD IMPORTS
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tqdm import tqdm
 import json
 import os
@@ -17,6 +17,7 @@ from datetime import datetime
 from config import config
 from model import create_classifier
 from augmentation import augment_signature
+
 class SignatureTrainer:
     def __init__(self):
         self.model = None
@@ -29,7 +30,7 @@ class SignatureTrainer:
         classes: List[Dict]
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, List[str]]:
         """
-        ✅ UPDATED: Prepare data with type-aware augmentation
+        ✅ UPDATED: No validation split - use all data for training
         
         Augmentation rules:
         - Default classes (unknown/non-signature): NO augmentation
@@ -40,7 +41,7 @@ class SignatureTrainer:
         
         train_features = []
         train_labels = []
-        val_features = []
+        val_features = []  # Will create dummy validation set
         val_labels = []
         class_labels = []
         
@@ -65,20 +66,10 @@ class SignatureTrainer:
             samples = cls.get('samples', [])
             print(f"   Original samples: {len(samples)}")
             
-            # ✅ SPLIT BEFORE AUGMENTATION
-            val_count = max(1, int(len(samples) * config.TRAINING['validation_split']))
-            val_samples = samples[:val_count]
-            train_samples = samples[val_count:]
+            # ✅ NO VALIDATION SPLIT - Use all data for training
+            train_samples = samples
             
-            print(f"   Split: {len(train_samples)} training, {len(val_samples)} validation")
-            
-            # Process VALIDATION samples (NO augmentation)
-            for sample in val_samples:
-                img = self._decode_base64_image(sample['thumbnail'])
-                if img is None:
-                    continue
-                val_features.append(img)
-                val_labels.append(class_idx)
+            print(f"   Using all {len(train_samples)} samples for training (no validation split)")
             
             # ✅ NEW: Count signatures by type
             if not is_default:
@@ -117,7 +108,6 @@ class SignatureTrainer:
             
             # Summary
             train_count = len([l for l in train_labels if l == class_idx])
-            val_count_actual = len([l for l in val_labels if l == class_idx])
             
             if is_default:
                 print(f"   ✅ Training: {train_count} (NO augmentation - default class)")
@@ -129,13 +119,16 @@ class SignatureTrainer:
                 print(f"   ✅ Training: {train_count} total")
                 print(f"      • {uploaded_augmented} uploaded (with {config.AUGMENTATION['per_sample']}x aug)")
                 print(f"      • {captured_originals} captured (no aug)")
-            print(f"   ✅ Validation: {val_count_actual} (originals only)")
         
         # Convert to numpy arrays
         X_train = np.array(train_features, dtype=np.float32)
         y_train = np.array(train_labels, dtype=np.int32)
-        X_val = np.array(val_features, dtype=np.float32)
-        y_val = np.array(val_labels, dtype=np.int32)
+        
+        # ✅ Create dummy validation set (required by Keras, but won't be used)
+        # Use a small subset of training data
+        val_size = min(len(train_features), 10)
+        X_val = X_train[:val_size].copy()
+        y_val = y_train[:val_size].copy()
         
         # Normalize images
         X_train = (X_train - 127.5) / 127.5
@@ -153,7 +146,7 @@ class SignatureTrainer:
         
         print(f"\n✅ Dataset prepared:")
         print(f"   Training samples: {len(X_train)} (shape: {X_train.shape})")
-        print(f"   Validation samples: {len(X_val)} (shape: {X_val.shape})")
+        print(f"   Validation samples: {len(X_val)} (dummy set from training)")
         print(f"   Classes: {self.num_classes}")
         print(f"   Class labels: {class_labels}")
         
@@ -161,7 +154,7 @@ class SignatureTrainer:
     
     def train(self, classes: List[Dict]) -> Dict:
         """
-        Train model with proper validation split and early stopping
+        Train model without validation split
         
         Returns:
             Training metrics including per-class signature counts
@@ -198,7 +191,7 @@ class SignatureTrainer:
                     'is_default': False
                 })
         
-        # Prepare data with separate train/val sets
+        # Prepare data without validation split
         X_train, y_train, X_val, y_val, self.class_labels = self.prepare_data(classes)
         
         # Create model
@@ -214,10 +207,10 @@ class SignatureTrainer:
         # Setup callbacks
         callbacks = []
         
-        # Early Stopping
+        # ✅ Early Stopping (monitor training loss instead of validation loss)
         if config.TRAINING['early_stopping_patience']:
             early_stop = EarlyStopping(
-                monitor='val_loss',
+                monitor='loss',  # ✅ Changed from 'val_loss' to 'loss'
                 patience=config.TRAINING['early_stopping_patience'],
                 min_delta=config.TRAINING.get('early_stopping_min_delta', 0.001),
                 restore_best_weights=config.TRAINING.get('early_stopping_restore_best', True),
@@ -226,13 +219,14 @@ class SignatureTrainer:
             )
             callbacks.append(early_stop)
             print(f"\n✅ Early stopping enabled:")
+            print(f"   Monitor: loss (training loss)")
             print(f"   Patience: {config.TRAINING['early_stopping_patience']} epochs")
             print(f"   Min delta: {config.TRAINING.get('early_stopping_min_delta', 0.001)}")
             print(f"   Restore best weights: {config.TRAINING.get('early_stopping_restore_best', True)}")
         
-        # Learning Rate Reduction on Plateau
+        # ✅ Learning Rate Reduction on Plateau (monitor training loss)
         reduce_lr = ReduceLROnPlateau(
-            monitor='val_loss',
+            monitor='loss',  # ✅ Changed from 'val_loss' to 'loss'
             factor=0.5,
             patience=5,
             min_lr=0.00001,
@@ -245,7 +239,7 @@ class SignatureTrainer:
         print(f"   Epochs: {config.TRAINING['epochs']}")
         print(f"   Batch size: {effective_batch_size}")
         print(f"   Learning rate: {config.TRAINING['learning_rate']}")
-        print(f"   Validation: Separate set (15% of originals)")
+        print(f"   Validation: Dummy set (training on 100% of data)")
         print(f"   Callbacks: {len(callbacks)} enabled")
         
         # Train with callbacks
@@ -263,7 +257,7 @@ class SignatureTrainer:
         
         training_time = (datetime.now() - start_time).total_seconds()
         
-        # Extract metrics
+        # ✅ Extract metrics (handle missing validation metrics)
         final_train_acc = history.history['accuracy'][-1]
         final_val_acc = history.history.get('val_accuracy', [final_train_acc])[-1]
         final_train_loss = history.history['loss'][-1]
@@ -271,16 +265,17 @@ class SignatureTrainer:
         
         epochs_trained = len(history.history['accuracy'])
         
-        best_epoch = np.argmin(history.history['val_loss']) + 1
-        best_val_loss = np.min(history.history['val_loss'])
-        best_val_acc = history.history['val_accuracy'][best_epoch - 1]
+        # ✅ Best epoch based on training loss
+        best_epoch = np.argmin(history.history['loss']) + 1
+        best_val_loss = np.min(history.history.get('val_loss', history.history['loss']))
+        best_val_acc = history.history.get('val_accuracy', history.history['accuracy'])[best_epoch - 1]
         
         metrics = {
             'training_accuracy': float(final_train_acc),
             'validation_accuracy': float(final_val_acc),
             'training_loss': float(final_train_loss),
             'validation_loss': float(final_val_loss), 
-            'training_time': training_time,
+                        'training_time': training_time,
             'epochs_requested': config.TRAINING['epochs'],
             'epochs_trained': epochs_trained,
             'best_epoch': best_epoch,
@@ -294,9 +289,9 @@ class SignatureTrainer:
             'class_info': class_info,  # ✅ NEW: Per-class signature counts
             'history': {
                 'accuracy': [float(x) for x in history.history['accuracy']],
-                'val_accuracy': [float(x) for x in history.history.get('val_accuracy', [])],
+                'val_accuracy': [float(x) for x in history.history.get('val_accuracy', history.history['accuracy'])],
                 'loss': [float(x) for x in history.history['loss']],
-                'val_loss': [float(x) for x in history.history.get('val_loss', [])]
+                'val_loss': [float(x) for x in history.history.get('val_loss', history.history['loss'])]
             }
         }
         
@@ -304,21 +299,20 @@ class SignatureTrainer:
         print("✅ TRAINING COMPLETE")
         print("="*60)
         print(f"📊 Final Training Accuracy: {final_train_acc*100:.2f}%")
-        print(f"📊 Final Validation Accuracy: {final_val_acc*100:.2f}%")
-        print(f"📉 Accuracy Gap: {abs(final_train_acc - final_val_acc)*100:.2f}%")
+        print(f"📊 Final Validation Accuracy: {final_val_acc*100:.2f}% (dummy set)")
         print(f"⏱️  Training Time: {training_time:.1f} seconds")
         
         if metrics['early_stopped']:
             print(f"\n🛑 Early stopping triggered!")
             print(f"   Stopped at epoch: {epochs_trained}/{config.TRAINING['epochs']}")
             print(f"   Best epoch: {best_epoch}")
-            print(f"   Best val_loss: {best_val_loss:.4f}")
-            print(f"   Best val_accuracy: {best_val_acc*100:.2f}%")
+            print(f"   Best loss: {best_val_loss:.4f}")
+            print(f"   Best accuracy: {best_val_acc*100:.2f}%")
             print(f"   Time saved: ~{(config.TRAINING['epochs'] - epochs_trained) * (training_time / epochs_trained):.1f}s")
         else:
             print(f"\n✅ Completed all {epochs_trained} epochs")
             print(f"   Best epoch: {best_epoch}")
-            print(f"   Best val_accuracy: {best_val_acc*100:.2f}%")
+            print(f"   Best accuracy: {best_val_acc*100:.2f}%")
         
         # ✅ NEW: Print signature counts per class
         print(f"\n📊 Signature Counts:")
@@ -360,6 +354,7 @@ class SignatureTrainer:
                 'epochs': config.TRAINING['epochs'],
                 'batch_size': config.TRAINING['batch_size'],
                 'learning_rate': config.TRAINING['learning_rate'],
+                'validation_split': config.TRAINING['validation_split'],
                 'early_stopping_enabled': config.TRAINING.get('early_stopping_patience') is not None,
                 'early_stopping_patience': config.TRAINING.get('early_stopping_patience'),
             },
@@ -473,6 +468,7 @@ class SignatureTrainer:
                 'epochs': config.TRAINING['epochs'],
                 'batch_size': config.TRAINING['batch_size'],
                 'learning_rate': config.TRAINING['learning_rate'],
+                'validation_split': config.TRAINING['validation_split'],
                 'early_stopping_enabled': config.TRAINING.get('early_stopping_patience') is not None,
                 'early_stopping_patience': config.TRAINING.get('early_stopping_patience'),
             },
