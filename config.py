@@ -61,7 +61,12 @@ class Config:
     
     # API Settings
     API = {
-        'cors_origins': '*',
+        'cors_origins': [
+            'http://localhost:5173',
+            'https://amsuip.vercel.app',
+            'https://amsuip-git-main-jelou-alonzos-projects.vercel.app',
+            'https://*.vercel.app'
+        ],
         'host': '0.0.0.0',
         'port': 5000,
         'debug': False,
